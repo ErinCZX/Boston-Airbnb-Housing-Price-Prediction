@@ -1,0 +1,150 @@
+---
+title: "DataComp"
+author: "Erin"
+date: "10/26/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(tidyr)
+library(dplyr)
+```
+
+```{r}
+#import raw data
+rev.details = fread("reviews_details.csv")
+rev.sum = fread("reviews_summary.csv")
+list.details = fread("listings_details.csv")
+list.sum = fread("listings_summary.csv")
+calendar = fread("calendar.csv")
+```
+
+```{r}
+list_map = list.details[,. (id, accommodates, price, neighbourhood, latitude, longitude)]
+list_map = na.omit(list_map)
+list_map$price = as.numeric(gsub("\\$", "", list_map$price))
+head(list_map)
+```
+```{r}
+hist(list_map$price)
+```
+
+```{r}
+list_map = list_map[price <= 600]
+```
+
+```{r}
+write.csv(list_map, "list_map.csv")
+```
+
+```{r}
+map_count = list_map[ ,.(count=length(unique(id))), by=neighbourhood]
+map_mean = list_map[ ,.(avg_price=mean(price)), by=neighbourhood]
+map_lon = list_map[ ,.(lon=mean(longitude)), by=neighbourhood]
+map_lat = list_map[ ,.(lat=mean(latitude)), by=neighbourhood]
+map_nbhd = cbind(map_count, map_mean, map_lat, map_lon)[,c(1,2,4,6,8)]
+map_nbhd
+```
+
+```{r}
+write.csv(map_nbhd, "mapnbhd.csv")
+```
+
+```{r}
+colnames(list.details)
+```
+
+```{r}
+##prepare features
+zip_has = list.details[ ,.(zip_has=.N), by=zipcode]
+#bathrooms
+host_day = round(difftime(strptime("2019-10-31", "%Y-%m-%d"),as.Date(list.details$host_since),units='days')/365,2)
+list.details$host_days = as.numeric(host_day)
+#bedrooms
+#minimum_nights
+#extra_people
+#guests_included
+#availability_365
+#number_of_reviews
+features0 = data.table(list.details %>% left_join(zip_has))
+features0 = features0[,.(id, zip_has, host_days, bedrooms, minimum_nights, extra_people, guests_included, availability_365, number_of_reviews)]
+```
+
+```{r}
+write.csv(features0, "features0.csv")
+```
+
+```{r}
+calendar[,.(price_new=as.numeric(gsub("\\$", "", calendar$price)))]
+calendar[,.(month=month(date))]
+```
+
+```{r}
+price_nbhd = data.table(calendar %>% left_join(list.sum, by = c("listing_id" = "id")))
+
+```
+
+```{r}
+features1 = fread("features1.csv")
+features2 = na.omit(features1)
+#features2
+write.csv(features2, "features2.csv")
+fread("features2.csv")
+```
+
+```{r}
+summary(list.details$host_total_listings_count)
+summary(list.details$host_listings_count)
+```
+```{r}
+calendar_num = calendar[ , which(sapply(calendar,is.numeric)), with=FALSE]
+```
+
+```{r}
+list.details_num = list.details[ , which(sapply(list.details,is.numeric)), with=FALSE]
+```
+
+
+
+```{r}
+#select numeric columns
+list.details_num = list.details[ , which(sapply(list.details,is.numeric)), with=FALSE]
+calendar_num = calendar[ , which(sapply(calendar,is.numeric)), with=FALSE]
+#replace outliers
+replace_outlier = function(x){
+    quantiles = quantile( x, c(.05, .95 ) )
+    x[ x < quantiles[1] ] = quantiles[1]
+    x[ x > quantiles[2] ] = quantiles[2]
+    x
+}
+replace_outlier(calendar_num)
+replace_outlier(list.details_num)
+#join calendar and listing details
+cal_detail = data.table(calendar_num %>% left_join(list.details_num, by = c("listing_id" = "id")))
+```
+
+```{r}
+m = lm(price ~ is_weekday+is_travel_month+is_holiday+id+host_response_rate+host_is_superhost+host_has_profile_pic+host_identity_verified+is_location_exact+accommodates+bathrooms+bedrooms+beds+security_deposit+cleaning_fee+guests_included+extra_people+minimum_nights+maximum_nights+availability_30+availability_90+availability_365+review_scores_accuracy+review_scores_cleanliness+review_scores_checkin+review_scores_communication+review_scores_location+instant_bookable+require_guest_phone_verification+reviews_per_month+host_years+zip_has+host_response_price+neighbourhood_cleansed_price+property_type_price+room_type_price+bed_type_price+cancellation_policy_price, data = list.details)
+
+```
+
+```{r}
+paste('is_weekday', 'is_travel_month',
+       'is_holiday', 'id', 'host_response_rate', 'host_is_superhost',
+        'host_has_profile_pic', 'host_identity_verified',
+        'is_location_exact', 'accommodates', 'bathrooms', 'bedrooms', 'beds',
+        'security_deposit', 'cleaning_fee', 'guests_included','extra_people', 'minimum_nights', 'maximum_nights',
+        'availability_30', 'availability_90', 'availability_365', 'review_scores_accuracy', 'review_scores_cleanliness',
+        'review_scores_checkin', 'review_scores_communication',
+        'review_scores_location', 'instant_bookable', 'require_guest_phone_verification',
+        'reviews_per_month',
+       'host_years', 'zip_has', 'host_response_price',
+       'neighbourhood_cleansed_price', 'property_type_price',
+       'room_type_price', 'bed_type_price', 'cancellation_policy_price', sep = "+")
+```
+
+
+
+
